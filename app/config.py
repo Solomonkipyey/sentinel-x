@@ -12,9 +12,11 @@ class Settings(BaseSettings):
     )
     POLL_INTERVAL_MINUTES: int = 30
     
-    # Email settings for the Watchlist alerts
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
+    
+    # New: Add your Slack Webhook URL here
+    SLACK_WEBHOOK_URL: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
