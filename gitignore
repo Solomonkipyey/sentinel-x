@@ -1,8 +1,0 @@
-.venv/
-.env
-__pycache__/
-*.pyc
-data/sentinel.db
-data/*.html
-lib/
-.streamlit/
