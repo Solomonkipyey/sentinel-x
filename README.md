@@ -18,6 +18,13 @@ It includes a built-in Lead Generator to identify companies recently mentioned i
 - **Auto-Pilot:** Background scheduler (APScheduler) fetches new intel every 30 minutes.
 - **Export Reports:** Generates professional HTML/PDF intelligence briefs for clients.
 - **Authentication:** Secure login system with custom CSS (Dark Slate & Cyan theme).
+## 📸 Screenshots
+
+<img width="1811" height="910" alt="Screenshot 2026-11-09 002359" src="https://github.com/user-attachments/assets/43ad9f2f-90c3-46b6-b551-ef0d3026d61b" />
+<img width="1857" height="777" alt="Screenshot 2026-11-09 002420" src="https://github.com/user-attachments/assets/46c3028a-f667-4153-ac1c-d123a5244855" />
+<img width="1897" height="648" alt="Screenshot 2026-11-09 002431" src="https://github.com/user-attachments/assets/67dd7b12-f9f4-41d6-aa9b-cd3a2d825e71" />
+<img width="1761" height="523" alt="Screenshot 2026-11-09 002440" src="https://github.com/user-attachments/assets/b0b47b84-0c01-40af-80cd-8654df949060" />
+<img width="1452" height="874" alt="Screenshot 2026-11-09 002450" src="https://github.com/user-attachments/assets/eb932bf4-bace-401d-bdb1-483aeda15581" />
 
 ## 🛠️ Tech Stack
 
