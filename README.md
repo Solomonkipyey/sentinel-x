@@ -35,7 +35,7 @@ It includes a built-in Lead Generator to identify companies recently mentioned i
 git clone https://github.com/Solomonkipyey/sentinel-x.git
 cd sentinel-x
 
-⚖️ Ethical Use & Disclaimer
+## 2.⚖️ Ethical Use & Disclaimer
 SENTINEL-X is built for defensive cybersecurity and threat intelligence purposes only. It only collects publicly available data (OSINT) and respects the Terms of Service of the sources it scrapes.
 Do not use this tool for unauthorized access, exploitation, or malicious activities.
 
@@ -43,5 +43,4 @@ Do not use this tool for unauthorized access, exploitation, or malicious activit
 Solomon Kipyey
 
 GitHub: @Solomonkipyey
-
 email:skipyey@gmail.com
