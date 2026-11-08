@@ -1,15 +1,18 @@
-# ==========================================
-# 1. IMPORTS (MUST BE AT THE VERY TOP)
-# ==========================================
 import datetime
 import uuid
+import smtplib
+from email.message import EmailMessage
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
+from app.config import settings
+from app.database import Base, engine, get_db, SessionLocal
 from app import models
 from app.services.collectors import fetch_rss_feeds, save_documents
 from app.services.extractor import extract_entities, persist_entities
@@ -17,13 +20,75 @@ from app.services.scoring import compute_all_risk
 from app.services.graph import build_graph, graph_to_json
 from app.services.geo import aggregate_geo
 from app.services.ai_analyst import analyze_document
+from app.services.lead_gen import generate_leads
 
-# ==========================================
-# 2. SETUP
-# ==========================================
 Base.metadata.create_all(engine)
 
-app = FastAPI(title="SENTINEL-X", version="0.1.0")
+# Setup Jinja2 for HTML templates
+env = Environment(loader=FileSystemLoader("app/templates"))
+
+# ==========================================
+# BACKGROUND SCHEDULER (AUTO-PILOT)
+# ==========================================
+scheduler = AsyncIOScheduler()
+
+async def auto_fetch_task():
+    print("⏰ [AUTO-PILOT] Starting background fetch...")
+    db = SessionLocal()
+    try:
+        items = await fetch_rss_feeds()
+        save_documents(db, items)
+
+        # Get all watchlist keywords
+        watchlist = [w.keyword.lower() for w in db.query(models.Watchlist).all()]
+        alerts = []
+
+        for doc in db.query(models.Document).all():
+            text = (doc.title + " " + doc.content).lower()
+            for keyword in watchlist:
+                if keyword in text:
+                    alerts.append((keyword, doc.title, doc.url))
+                    break # Only alert once per document
+
+        compute_all_risk(db)
+
+        # Send Email if there are alerts
+        if alerts and settings.SMTP_EMAIL:
+            msg = EmailMessage()
+            msg['Subject'] = f"🚨 SENTINEL-X Alert: {len(alerts)} Watchlist Matches"
+            msg['From'] = settings.SMTP_EMAIL
+            msg['To'] = settings.SMTP_EMAIL
+            
+            body = "SENTINEL-X Watchlist Alerts:\n\n"
+            for keyword, title, url in alerts:
+                body += f"🎯 MATCH: {keyword.upper()}\n📰 {title}\n🔗 {url}\n\n"
+            
+            msg.set_content(body)
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                smtp.login(settings.SMTP_EMAIL, settings.SMTP_PASSWORD)
+                smtp.send_message(msg)
+            print(f"📧 Sent email with {len(alerts)} alerts!")
+
+        print(f"✅ [AUTO-PILOT] Done. Total docs: {db.query(models.Document).count()}")
+    except Exception as e:
+        print(f"❌ [AUTO-PILOT] Error: {e}")
+    finally:
+        db.close()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Schedule the auto-fetch to run every 30 minutes
+    scheduler.add_job(auto_fetch_task, "interval", minutes=30, id="fetch_job")
+    scheduler.start()
+    print("🚀 [SENTINEL-X] Auto-pilot started. Fetching news every 30 minutes.")
+    yield
+    # Shutdown
+    scheduler.shutdown()
+    print("🛑 [SENTINEL-X] Auto-pilot stopped.")
+
+
+app = FastAPI(title="SENTINEL-X", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,13 +96,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Setup Jinja2 for HTML templates
-env = Environment(loader=FileSystemLoader("app/templates"))
-
-
 # ==========================================
-# 3. ENDPOINTS
+# API ENDPOINTS
 # ==========================================
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -118,6 +180,29 @@ def export_pdf(db: Session = Depends(get_db)):
         entities=entities
     )
     headers = {
-        "Content-Disposition": f"attachment; filename=sentinel_x_report.html"
+        "Content-Disposition": "attachment; filename=sentinel_x_report.html"
     }
     return HTMLResponse(content=html_content, headers=headers)
+
+# ==========================================
+# WATCHLIST ENDPOINTS
+# ==========================================
+@app.post("/watchlist/add")
+def add_to_watchlist(keyword: str, db: Session = Depends(get_db)):
+    existing = db.query(models.Watchlist).filter_by(keyword=keyword.lower()).first()
+    if not existing:
+        db.add(models.Watchlist(keyword=keyword.lower()))
+        db.commit()
+    return {"status": "added", "keyword": keyword}
+
+@app.get("/watchlist")
+def get_watchlist(db: Session = Depends(get_db)):
+    items = db.query(models.Watchlist).all()
+    return [{"id": w.id, "keyword": w.keyword} for w in items]
+
+# ==========================================
+# LEAD GENERATOR ENDPOINT
+# ==========================================
+@app.get("/leads")
+def get_leads(db: Session = Depends(get_db)):
+    return generate_leads(db)

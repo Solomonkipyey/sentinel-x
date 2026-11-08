@@ -1,3 +1,7 @@
+import streamlit as st
+if "authenticated" not in st.session_state or not st.session_state.authenticated:
+    st.warning("Please log in on the main page.")
+    st.stop()
 import httpx
 import streamlit as st
 

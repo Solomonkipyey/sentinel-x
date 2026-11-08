@@ -77,3 +77,11 @@ class GeoEvent(Base):
     lon: Mapped[float] = mapped_column(Float)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     description: Mapped[str] = mapped_column(Text, default="")
+    # ==========================================
+# THE NEW WATCHLIST TABLE
+# ==========================================
+class Watchlist(Base):
+    __tablename__ = "watchlists"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uuidstr)
+    keyword: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

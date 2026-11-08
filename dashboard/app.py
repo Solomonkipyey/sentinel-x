@@ -1,91 +1,137 @@
 import httpx
 import pandas as pd
 import streamlit as st
-
-API = "http://localhost:8000"
+from pathlib import Path
 
 st.set_page_config(page_title="SENTINEL-X", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ SENTINEL-X — Threat Intelligence Console")
-st.caption("Live OSINT data • Ethical use only")
+# ==========================================
+# CUSTOM LOGIN SYSTEM (Professional)
+# ==========================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    # Center the login box
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("<h1 style='text-align: center; color: #38bdf8;'>🛡️ SENTINEL-X</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94a3b8;'>Secure Authentication</p>", unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("LOGIN", use_container_width=True)
+            
+            if submit:
+                if username == "solomon" and password == "Drsolomon96":
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+    st.stop()
+
+# ==========================================
+# LOAD CUSTOM CSS
+# ==========================================
+def load_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+css_path = Path(__file__).parent / "assets" / "style.css"
+if css_path.exists():
+    load_css(css_path)
+
+# ==========================================
+# DASHBOARD CONTENT
+# ==========================================
+API = "http://localhost:8000"
+
+st.sidebar.markdown("### System Status")
+st.sidebar.success("🟢 Online")
+if st.sidebar.button("Logout", use_container_width=True):
+    st.session_state.authenticated = False
+    st.rerun()
+
+st.title("🛡️ SENTINEL-X Threat Intelligence")
+st.markdown("---")
 
 @st.cache_data(ttl=30)
 def api_get(path: str):
     try:
         return httpx.get(f"{API}{path}", timeout=30).json()
     except Exception as e:
-        st.error(f"⚠️ Backend not reachable at {API}\n\nError: {e}")
+        st.error(f"⚠️ Backend not reachable. Is Uvicorn running?\n\nError: {e}")
         return None
 
 stats = api_get("/stats") or {}
-c1, c2, c3 = st.columns(3)
-c1.metric("📄 Documents", stats.get("documents", 0))
-c2.metric("🎯 Entities", stats.get("entities", 0))
-c3.metric("📊 Reports", stats.get("reports", 0))
 
-st.divider()
-st.subheader("⚡ Actions")
+# Metric Cards
+col1, col2, col3 = st.columns(3)
+col1.metric("Documents Analyzed", stats.get("documents", 0))
+col2.metric("Threat Indicators", stats.get("entities", 0))
+col3.metric("Reports Generated", stats.get("reports", 0))
 
-a1, _ = st.columns([1, 3])
-if a1.button("🔄 Fetch live news", use_container_width=True):
-    with st.spinner("Fetching..."):
-        try:
-            r = httpx.post(f"{API}/collect/run", timeout=180)
-            data = r.json()
-            st.success(
-                f"✅ {data.get('new_documents', 0)} new docs • "
-                f"{data.get('total_documents', 0)} total docs • "
-                f"{data.get('total_entities', 0)} entities"
-            )
-            st.cache_data.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Failed: {e}")
+st.markdown("---")
 
-st.divider()
-st.subheader("🎯 Top Risky Entities")
+# Action Center
+st.subheader("⚡ Action Center")
+a1, a2, a3 = st.columns([1, 2, 1])
+with a2:
+    if st.button("🔄 Fetch Live Threat Intel", use_container_width=True, type="primary"):
+        with st.spinner("Scraping global news feeds..."):
+            try:
+                r = httpx.post(f"{API}/collect/run", timeout=180)
+                data = r.json()
+                st.success(f"✅ Collected {data.get('new_documents', 0)} new documents.")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Collection failed: {e}")
 
+st.markdown("---")
+
+# Threat Table
+st.subheader("🎯 Active Threat Vectors")
 entities = api_get("/entities?min_risk=0&limit=50") or []
 
 if not entities:
-    st.info("No entities yet — click 'Fetch live news' above.")
+    st.info("No indicators found. Run a collection above.")
 else:
     df = pd.DataFrame(entities)
-    df = df.rename(columns={"kind": "Type", "value": "Value", "risk": "Risk"})
-    df = df[["Risk", "Type", "Value"]]
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Risk": st.column_config.ProgressColumn(
-                "Risk", min_value=0, max_value=100, format="%.2f"
-            ),
-        },
-    )
-    st.subheader("📊 Entities by type")
-    st.bar_chart(df.groupby("Type").size())
+    df = df.rename(columns={"kind": "Type", "value": "Indicator", "risk": "Risk Score"})
+    df = df[["Risk Score", "Type", "Indicator"]]
+    
+    c1, c2, c3 = st.columns([1, 10, 1])
+    with c2:
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Risk Score": st.column_config.ProgressColumn(
+                    "Risk Score", min_value=0, max_value=100, format="%.2f"
+                ),
+            },
+        )
 
-# ============================================================
-# PDF EXPORT SECTION
-# ============================================================
-st.divider()
-st.subheader("📄 Export Intelligence Report")
-st.write("Generate a clean, styled HTML intelligence report containing the top 30 riskiest entities.")
+# Report Export
+st.markdown("---")
+st.subheader("📄 Export Intelligence")
+c1, c2, c3 = st.columns([1, 2, 1])
+with c2:
+    if st.button("Generate PDF Brief", use_container_width=True):
+        with st.spinner("Compiling report..."):
+            try:
+                response = httpx.get(f"{API}/export/pdf", timeout=30)
+                st.download_button(
+                    label="💾 Download Report",
+                    data=response.content,
+                    file_name="sentinel_x_report.html",
+                    mime="text/html",
+                    type="primary"
+                )
+            except Exception as e:
+                st.error(f"Export failed: {e}")
 
-if st.button("📥 Generate & Download Report"):
-    with st.spinner("Generating report..."):
-        try:
-            response = httpx.get(f"{API}/export/pdf", timeout=30)
-            st.download_button(
-                label="💾 Click here to save the report",
-                data=response.content,
-                file_name="sentinel_x_report.html",
-                mime="text/html",
-                type="primary"
-            )
-            st.success("✅ Report generated! Click the button above to save it.")
-        except Exception as e:
-            st.error(f"Failed to generate report: {e}")
-
-st.caption("SENTINEL-X v0.1 • Public data only • Respect site ToS")
+st.caption("SENTINEL-X v1.0 • All Systems Operational • Confidential")

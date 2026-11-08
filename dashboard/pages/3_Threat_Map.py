@@ -1,52 +1,68 @@
-import folium
-import httpx
-import pandas as pd
 import streamlit as st
-from streamlit_folium import st_folium
+import httpx
+from pathlib import Path
 
-st.set_page_config(page_title="Threat Map", page_icon="🌍", layout="wide")
-st.title("🌍 Global Threat Map")
-st.caption("Threats mentioned per country in collected articles")
+# Auth Check
+if "authenticated" not in st.session_state or not st.session_state.authenticated:
+    st.warning("Please log in on the main page.")
+    st.stop()
+
+st.set_page_config(page_title="AI Analyst", page_icon="🧠", layout="wide")
+
+# Load CSS
+def load_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+css_path = Path(__file__).parent.parent / "assets" / "style.css"
+if css_path.exists():
+    load_css(css_path)
+
+st.markdown("<h1>🧠 AI Threat Analyst</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color: #888;'>Analyze any collected article with AI</p>", unsafe_allow_html=True)
 
 API = "http://localhost:8000"
 
 try:
-    data = httpx.get(f"{API}/geo/threats", timeout=30).json()
+    docs = httpx.get(f"{API}/documents?limit=20", timeout=30).json()
 except Exception as e:
     st.error(f"Cannot reach API: {e}")
     st.stop()
 
-if not data:
-    st.info("No geo data yet — run collection first")
+if not docs:
+    st.info("No documents yet — fetch news on Home page first")
     st.stop()
 
-df = pd.DataFrame(data)
+options = {f"{d['title'][:80]}": d["id"] for d in docs}
+selected_title = st.selectbox("Pick a document", list(options.keys()))
+selected_id = options[selected_title]
 
-m = folium.Map(
-    location=[20, 0],
-    zoom_start=2,
-    tiles="cartoDB dark_matter",
-    prefer_canvas=True,
-)
+if st.button("🤖 INITIATE ANALYSIS", type="primary"):
+    with st.spinner("Analyzing threat data..."):
+        try:
+            r = httpx.post(f"{API}/analyze/{selected_id}", timeout=60)
+            result = r.json()
+        except Exception as e:
+            st.error(f"Failed: {e}")
+            st.stop()
 
-max_count = df["count"].max()
+    if "error" in result:
+        st.error(result["error"])
+    else:
+        st.markdown("<h3>Executive Summary</h3>", unsafe_allow_html=True)
+        st.info(result.get("summary", "—"))
 
-for _, row in df.iterrows():
-    radius = 5 + (row["count"] / max_count) * 25
-    folium.CircleMarker(
-        location=[row["lat"], row["lon"]],
-        radius=radius,
-        color="#ff4d4d",
-        fill=True,
-        fill_color="#ff4d4d",
-        fill_opacity=0.5,
-        weight=2,
-        popup=f"<b>{row['country']}</b><br>{row['count']} threats",
-        tooltip=f"{row['country']}: {row['count']}",
-    ).add_to(m)
+        col1, col2 = st.columns(2)
+        col1.metric("SEVERITY", result.get("severity", "—").upper())
+        col2.metric("STATUS", "AI-ASSISTED")
 
-st_folium(m, width=1400, height=600)
+        st.markdown("<h3>Threat Actors</h3>", unsafe_allow_html=True)
+        actors = result.get("threat_actors", [])
+        st.write(", ".join(actors) if actors else "None identified")
 
-st.subheader("Top target countries")
-top = df.sort_values("count", ascending=False).head(10)
-st.bar_chart(top.set_index("country")["count"])
+        st.markdown("<h3>TTPs (MITRE ATT&CK)</h3>", unsafe_allow_html=True)
+        ttps = result.get("ttps", [])
+        st.write(", ".join(ttps) if ttps else "None identified")
+
+        st.markdown("<h3>Affected Products</h3>", unsafe_allow_html=True)
+        products = result.get("affected_products", [])
+        st.write(", ".join(products) if products else "None identified")
